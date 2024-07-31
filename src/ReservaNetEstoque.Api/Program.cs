@@ -1,31 +1,47 @@
+using Infraestructure.Elasticsearch.Extensions;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using ReservaNetEstoque.Api.Commands;
+using ReservaNetEstoque.Api.Workers;
+using Serilog;
 
-var builder = WebApplication.CreateBuilder(args);
+try {
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+    var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<Program>());
+    // builder.AddSerilog(builder.Configuration, "ReservaNetEstoque.Api", "ReservaNetEstoque:");
 
-var app = builder.Build();
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+    builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<Program>());
+
+    builder.Services.AddHostedService<ConsomeFileGerarTransferenciaWorker>();
+    builder.Services.AddHostedService<VerificaNotasFiscaisPendentesPriorizacaoWorker>();
+
+    var app = builder.Build();
+
+
+    // Configure the HTTP request pipeline.
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI();
+    }
+
+    app.MapGet("/priorizacao/prioriza-nota", (IMediator mediator, [FromQuery] string notaFiscal) => {
+        return mediator.Send(new GeraTransferenciaASerRealizadaCommand() { NotaFiscal = notaFiscal });
+    });
+
+    app.Run();
+}
+catch (Exception ex)
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    Log.Fatal(ex, "Host terminated unexpectedly");
+}
+finally
+{
+    Log.Information("Server Shutting down...");
+    Log.CloseAndFlush();
 }
 
-app.MapGet("/listaops", (IMediator mediator) => {
-    return mediator.Send(new ListaOpsCommand());
-});
-
-app.MapGet("/criaop", (IMediator mediator, [FromQuery] string codigo) => {
-    var request = new CriaOpCommand(); 
-    request.Codigo = codigo;
-    
-    return mediator.Send(request);
-});
-
-app.Run();
